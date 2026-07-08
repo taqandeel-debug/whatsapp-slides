@@ -3,76 +3,86 @@ from pptx import Presentation
 from pptx.util import Inches
 import io
 
-# Page Config for Mobile
+# Page Config optimized for mobile viewports
 st.set_page_config(page_title="WhatsApp Slide Maker", layout="wide")
 
 st.title("📱 Daily WhatsApp Slides")
-st.write("Upload your photos. I will sort them by time and put 3 on each slide.")
+st.write("Upload photos. They will stay safely in memory until you download.")
 
-# 1. File Uploader (Mobile native camera/gallery)
+# Initialize background memory (Session State) so photos never disappear
+if "saved_photos" not in st.session_state:
+    st.session_state.saved_photos = []
+
+# 1. File Uploader
 uploaded_files = st.file_uploader(
     "Tap to add photos", 
     accept_multiple_files=True, 
-    type=['png', 'jpg', 'jpeg']
+    type=['png', 'jpg', 'jpeg'],
+    key="uploader_input"
 )
 
+# If new files are uploaded, instantly save them into background memory
 if uploaded_files:
-    # 2. Sort Logic: WhatsApp images are named by date (IMG-2023...), so sorting by name works perfectly
-    uploaded_files.sort(key=lambda x: x.name)
+    # Merge or overwrite background memory with new files
+    st.session_state.saved_photos = uploaded_files
+    # Chronological sort based on WhatsApp file names (IMG-YYYYMMDD...)
+    st.session_state.saved_photos.sort(key=lambda x: x.name)
+
+# Process only if we have photos safely tucked in background memory
+if st.session_state.saved_photos:
+    total_photos = len(st.session_state.saved_photos)
+    st.success(f"✅ {total_photos} photos safely holding in memory.")
     
-    st.success(f"✅ {len(uploaded_files)} photos loaded in chronological order.")
-    
-    # 3. Preview Section
+    # 2. Preview Layout
     st.divider()
     st.subheader("👀 Slide Preview")
     
-    # Group images into chunks of 3
-    chunks = [uploaded_files[i:i + 3] for i in range(0, len(uploaded_files), 3)]
+    # Group images into blocks of 3
+    chunks = [st.session_state.saved_photos[i:i + 3] for i in range(0, total_photos, 3)]
     
     for i, group in enumerate(chunks):
         st.write(f"**Slide {i+1}**")
         cols = st.columns(3)
         for idx, file in enumerate(group):
-            # Display image in the column
+            # Ensure file pointer is at the start before viewing
+            file.seek(0)
             cols[idx].image(file, use_container_width=True)
             cols[idx].caption(f"Pic {idx+1}")
     
     st.divider()
 
-    # 4. PPT Generation Button
-    if st.button("🚀 Convert to PowerPoint"):
-        # Create Presentation
-        prs = Presentation()
-        # Set to 16:9 widescreen (ideal for phones/TVs)
-        prs.slide_width = Inches(13.333)
-        prs.slide_height = Inches(7.5)
+    # 3. Secure PowerPoint Generation (No memory loss on click)
+    # Using container to avoid full page refresh issues on mobile browsers
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+    blank_layout = prs.slide_layouts[6] # Secure standard blank layout index
+    
+    for group in chunks:
+        slide = prs.slides.add_slide(blank_layout)
+        positions = [Inches(0.5), Inches(4.7), Inches(8.9)]
+        top = Inches(1.5)
+        height = Inches(4.5)
         
-        # Select standard blank slide layout (Index 6 is completely blank layout)
-        blank_layout = prs.slide_layouts[6]
-        
-        # Loop through groups and create slides
-        for group in chunks:
-            slide = prs.slides.add_slide(blank_layout)
-            
-            # Layout Calculation: 3 images side-by-side
-            # Slide Width: 13.33" | Image Width: ~4.2" | Spacing: ~0.2"
-            positions = [Inches(0.2), Inches(4.56), Inches(8.92)]
-            top = Inches(1.5) # Vertically centered
-            height = Inches(4.5) # Fixed height, width scales automatically
-            
-            for idx, file in enumerate(group):
-                # Reset file pointer to beginning so PPTX can read it
-                file.seek(0)
-                slide.shapes.add_picture(file, positions[idx], top, height=height)
+        for idx, file in enumerate(group):
+            file.seek(0) # Reset pointer safely
+            slide.shapes.add_picture(file, positions[idx], top, height=height)
 
-        # Save to memory buffer
-        ppt_output = io.BytesIO()
-        prs.save(ppt_output)
-        ppt_output.seek(0)
-        
-        st.download_button(
-            label="📥 Download Final PPT",
-            data=ppt_output,
-            file_name="Daily_Updates.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        )
+    # Save presentation to memory buffer
+    ppt_output = io.BytesIO()
+    prs.save(ppt_output)
+    ppt_output.seek(0)
+    
+    # Direct download button (Eliminates the unstable two-button step)
+    st.download_button(
+        label="📥 Download PowerPoint File",
+        data=ppt_output,
+        file_name="Daily_Updates.pptx",
+        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        use_container_width=True
+    )
+    
+    # Reset button to clear memory for next batch
+    if st.button("🗑️ Clear All Photos & Start New", use_container_width=True):
+        st.session_state.saved_photos = []
+        st.rerun()
