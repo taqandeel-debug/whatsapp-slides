@@ -47,9 +47,12 @@ if uploaded_files:
         prs.slide_width = Inches(13.333)
         prs.slide_height = Inches(7.5)
         
+        # Select standard blank slide layout (Index 6 is completely blank layout)
+        blank_layout = prs.slide_layouts[6]
+        
         # Loop through groups and create slides
         for group in chunks:
-            slide = prs.slides.add_slide(prs.slide_layouts[6]) # Blank Layout
+            slide = prs.slides.add_slide(blank_layout)
             
             # Layout Calculation: 3 images side-by-side
             # Slide Width: 13.33" | Image Width: ~4.2" | Spacing: ~0.2"
